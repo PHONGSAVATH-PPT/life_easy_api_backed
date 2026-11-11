@@ -1,0 +1,431 @@
+openapi: 3.0.3
+
+info:
+  title: Life Easy API
+  version: 1.0.0
+  description: Part 1 API for Life Easy.
+
+servers:
+  - url: /api/v1
+
+security:
+  - bearerAuth: []
+
+paths:
+  /auth/register:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name:
+                  type: string
+                  minLength: 2
+                  maxLength: 100
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+                  minLength: 12
+                  maxLength: 72
+      responses:
+        "201":
+          $ref: "#/components/responses/Session"
+        "400":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+      responses:
+        "200":
+          $ref: "#/components/responses/Session"
+        "401":
+          $ref: "#/components/responses/Error"
+
+  /workspace:
+    get:
+      tags: [Workspace]
+      summary: Get authorized workspace
+      responses:
+        "200":
+          $ref: "#/components/responses/Workspace"
+        "401":
+          $ref: "#/components/responses/Error"
+
+  /entries/{id}:
+    parameters:
+      - $ref: "#/components/parameters/EntryID"
+    put:
+      tags: [Entries]
+      summary: Create or update an owned entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EntryInput"
+      responses:
+        "200":
+          $ref: "#/components/responses/Workspace"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+    delete:
+      tags: [Entries]
+      summary: Delete an editable owned entry
+      responses:
+        "200":
+          $ref: "#/components/responses/Workspace"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /entries/{id}/toggle:
+    parameters:
+      - $ref: "#/components/parameters/EntryID"
+    post:
+      tags: [Entries]
+      summary: Toggle an owned or assigned task
+      responses:
+        "200":
+          $ref: "#/components/responses/Workspace"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /bills/{id}/pay:
+    parameters:
+      - $ref: "#/components/parameters/EntryID"
+    post:
+      tags: [Entries]
+      summary: Record payment and create one linked expense
+      description: Repeating payment for the same bill does not create another expense.
+      responses:
+        "200":
+          $ref: "#/components/responses/Workspace"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /families:
+    post:
+      tags: [Families]
+      summary: Create a family
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 2
+                  maxLength: 100
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      family_id:
+                        type: string
+                        format: uuid
+        "401":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+
+  /families/{id}/members:
+    parameters:
+      - $ref: "#/components/parameters/FamilyID"
+    post:
+      tags: [Families]
+      summary: Owner adds an already registered user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "200":
+          $ref: "#/components/responses/Workspace"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+
+  /families/{id}/members/{userID}:
+    parameters:
+      - $ref: "#/components/parameters/FamilyID"
+      - name: userID
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    delete:
+      tags: [Families]
+      summary: Owner removes a member
+      responses:
+        "200":
+          $ref: "#/components/responses/Workspace"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    EntryID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[A-Za-z0-9_-]{1,100}$"
+
+    FamilyID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    Error:
+      description: Request failed
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  request_id:
+                    type: string
+
+    Session:
+      description: Authenticated session
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                  token_type:
+                    type: string
+                    example: Bearer
+                  expires_in:
+                    type: integer
+                    example: 900
+                  user:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      email:
+                        type: string
+                      name:
+                        type: string
+
+    Workspace:
+      description: Current authorized workspace
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data:
+                type: object
+                properties:
+                  family_id:
+                    type: string
+                    format: uuid
+                    nullable: true
+                  entries:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Entry"
+                  members:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        name:
+                          type: string
+                        role:
+                          type: string
+                          enum: [owner, member]
+
+  schemas:
+    EntryInput:
+      type: object
+      additionalProperties: false
+      required: [kind, title, due_at, currency]
+      properties:
+        id:
+          type: string
+        family_id:
+          type: string
+          format: uuid
+          nullable: true
+        kind:
+          type: string
+          enum: [task, appointment, income, expense, bill, document]
+        title:
+          type: string
+          maxLength: 200
+        due_at:
+          type: string
+          format: date-time
+        amount_minor:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 90000000000000
+        currency:
+          type: string
+          enum: [LAK, THB]
+        done:
+          type: boolean
+          default: false
+        shared:
+          type: boolean
+          default: false
+        note:
+          type: string
+          maxLength: 5000
+        assignee_id:
+          type: string
+          format: uuid
+          nullable: true
+        recurrence:
+          type: string
+          enum: [none, monthly]
+          default: none
+        reminder_enabled:
+          type: boolean
+          default: false
+        source_bill_id:
+          type: string
+          nullable: true
+          description: Must be omitted or null in client requests.
+
+    Entry:
+      type: object
+      properties:
+        id:
+          type: string
+        owner_id:
+          type: string
+          format: uuid
+        family_id:
+          type: string
+          format: uuid
+          nullable: true
+        kind:
+          type: string
+        title:
+          type: string
+        due_at:
+          type: string
+          format: date-time
+        amount_minor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        done:
+          type: boolean
+        shared:
+          type: boolean
+        note:
+          type: string
+        assignee_id:
+          type: string
+          format: uuid
+          nullable: true
+        recurrence:
+          type: string
+        reminder_enabled:
+          type: boolean
+        source_bill_id:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
