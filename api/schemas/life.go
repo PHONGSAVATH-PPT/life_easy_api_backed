@@ -13,7 +13,7 @@ type Login struct {
 	Password string `json:"password" validate:"required,max=72"`
 }
 
-type UpsertEntry struct {
+type EntryInput struct {
 	ID           string    `json:"id"`
 	FamilyID     *string   `json:"family_id" validate:"omitempty,uuid4"`
 	Kind         string    `json:"kind" validate:"required,oneof=task appointment income expense bill document"`

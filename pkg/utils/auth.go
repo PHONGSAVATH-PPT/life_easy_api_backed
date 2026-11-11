@@ -8,17 +8,17 @@ import (
 )
 
 const (
-	TokenIssuer   = "life-easy-api"
-	TokenAudience = "life-easy-mobile"
-	TokenLifetime = 15 * time.Minute
+	Issuer   = "life-easy-api"
+	Audience = "life-easy-mobile"
+	Lifetime = 15 * time.Minute
 )
 
 func HashPassword(password string) (string, error) {
-	hash, err := bcrypt.GenerateFromPassword(
+	result, err := bcrypt.GenerateFromPassword(
 		[]byte(password),
 		12,
 	)
-	return string(hash), err
+	return string(result), err
 }
 
 func ComparePassword(hash, password string) bool {
@@ -33,11 +33,11 @@ func GenerateToken(userID, secret string) (string, error) {
 
 	claims := jwt.RegisteredClaims{
 		Subject:   userID,
-		Issuer:    TokenIssuer,
-		Audience:  jwt.ClaimStrings{TokenAudience},
+		Issuer:    Issuer,
+		Audience:  jwt.ClaimStrings{Audience},
 		IssuedAt:  jwt.NewNumericDate(now),
 		NotBefore: jwt.NewNumericDate(now),
-		ExpiresAt: jwt.NewNumericDate(now.Add(TokenLifetime)),
+		ExpiresAt: jwt.NewNumericDate(now.Add(Lifetime)),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -55,8 +55,8 @@ func ParseToken(raw, secret string) (string, error) {
 			return []byte(secret), nil
 		},
 		jwt.WithValidMethods([]string{"HS256"}),
-		jwt.WithIssuer(TokenIssuer),
-		jwt.WithAudience(TokenAudience),
+		jwt.WithIssuer(Issuer),
+		jwt.WithAudience(Audience),
 		jwt.WithExpirationRequired(),
 	)
 
