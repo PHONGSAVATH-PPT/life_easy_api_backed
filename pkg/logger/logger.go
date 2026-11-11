@@ -21,18 +21,18 @@ func New() (*zap.Logger, error) {
 		Compress:   false,
 	}
 
-	config := zap.NewProductionEncoderConfig()
-	config.TimeKey = "timestamp"
-	config.EncodeTime = zapcore.ISO8601TimeEncoder
+	encoder := zap.NewProductionEncoderConfig()
+	encoder.TimeKey = "timestamp"
+	encoder.EncodeTime = zapcore.ISO8601TimeEncoder
 
-	writer := zapcore.NewMultiWriteSyncer(
+	output := zapcore.NewMultiWriteSyncer(
 		zapcore.AddSync(os.Stdout),
 		zapcore.AddSync(file),
 	)
 
 	core := zapcore.NewCore(
-		zapcore.NewJSONEncoder(config),
-		writer,
+		zapcore.NewJSONEncoder(encoder),
+		output,
 		zap.InfoLevel,
 	)
 

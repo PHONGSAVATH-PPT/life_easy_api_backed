@@ -16,29 +16,38 @@ type Config struct {
 
 func Load() (Config, error) {
 	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
-		return Config{}, errors.New("cannot load environment file")
+		return Config{}, errors.New("cannot load .env")
 	}
 
-	required := []string{
+	if os.Getenv("JWT_SECRET") == "" {
+		return Config{}, errors.New("missing environment: JWT_SECRET")
+	}
+
+	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
+		if err := validateDatabaseURL(dsn); err != nil {
+			return Config{}, err
+		}
+
+		return Config{
+			DatabaseURL: dsn,
+			JWTSecret:   os.Getenv("JWT_SECRET"),
+		}, nil
+	}
+
+	for _, key := range []string{
+		"POSTGRES_DB",
 		"POSTGRES_USER",
 		"POSTGRES_PASSWORD",
-		"POSTGRES_DB",
-		"JWT_SECRET",
-	}
-
-	for _, key := range required {
+	} {
 		if os.Getenv(key) == "" {
-			return Config{}, errors.New("missing environment variable: " + key)
+			return Config{}, errors.New("missing environment: " + key)
 		}
 	}
 
 	secret := os.Getenv("JWT_SECRET")
 	if len(secret) < 32 {
-		return Config{}, errors.New("JWT_SECRET must be at least 32 bytes")
+		return Config{}, errors.New("JWT_SECRET must contain at least 32 bytes")
 	}
-
-	host := value("DB_HOST", "localhost")
-	port := value("DB_PORT", "5432")
 
 	dsn := url.URL{
 		Scheme: "postgres",
@@ -46,7 +55,10 @@ func Load() (Config, error) {
 			os.Getenv("POSTGRES_USER"),
 			os.Getenv("POSTGRES_PASSWORD"),
 		),
-		Host: net.JoinHostPort(host, port),
+		Host: net.JoinHostPort(
+			value("DB_HOST", "localhost"),
+			value("DB_PORT", "5432"),
+		),
 		Path: os.Getenv("POSTGRES_DB"),
 	}
 
@@ -58,6 +70,15 @@ func Load() (Config, error) {
 		DatabaseURL: dsn.String(),
 		JWTSecret:   secret,
 	}, nil
+}
+
+func validateDatabaseURL(dsn string) error {
+	parsed, err := url.Parse(dsn)
+	if err != nil || (parsed.Scheme != "postgres" && parsed.Scheme != "postgresql") || parsed.Host == "" || parsed.Path == "" {
+		return errors.New("DATABASE_URL must be a valid PostgreSQL URL")
+	}
+
+	return nil
 }
 
 func value(key, fallback string) string {
