@@ -1,0 +1,195 @@
+name: life-easy
+
+services:
+  postgres:
+    image: postgres:17.6-alpine
+    restart: unless-stopped
+
+    # Expose PostgreSQL only to this machine, for example for DataGrip.
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?required}
+      POSTGRES_USER: ${POSTGRES_USER:?required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+    networks:
+      - backend
+
+  migrate:
+    image: migrate/migrate:v4.18.3
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    volumes:
+      - ./migrations:/migrations:ro
+
+    command:
+      - -path=/migrations
+      - -database=${DATABASE_URL:-postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable}
+      - up
+
+    networks:
+      - backend
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    restart: unless-stopped
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable}
+      JWT_SECRET: ${JWT_SECRET:?required}
+
+    volumes:
+      - api_logs:/app/logs
+
+    read_only: true
+
+    tmpfs:
+      - /tmp
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    networks:
+      - backend
+
+  kong:
+    image: kong:3.9.1
+    restart: unless-stopped
+
+    depends_on:
+      api:
+        condition: service_healthy
+
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /kong/declarative/kong.yml
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      KONG_ADMIN_LISTEN: "off"
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+
+    volumes:
+      - ./deploy/kong.yml:/kong/declarative/kong.yml:ro
+
+    ports:
+      - "127.0.0.1:8000:8000"
+
+    networks:
+      - backend
+
+  pgadmin:
+    image: dpage/pgadmin4:9.8
+    restart: unless-stopped
+
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:?required}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:?required}
+
+    ports:
+      - "127.0.0.1:5050:80"
+
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    networks:
+      - backend
+
+  loki:
+    image: grafana/loki:3.5.5
+    restart: unless-stopped
+
+    command:
+      - -config.file=/etc/loki/loki.yml
+
+    volumes:
+      - ./deploy/loki.yml:/etc/loki/loki.yml:ro
+      - loki_data:/loki
+
+    networks:
+      - backend
+
+  alloy:
+    image: grafana/alloy:v1.11.0
+    restart: unless-stopped
+
+    command:
+      - run
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+
+    volumes:
+      - ./deploy/alloy.alloy:/etc/alloy/config.alloy:ro
+      - api_logs:/var/log/life:ro
+      - alloy_data:/var/lib/alloy/data
+
+    depends_on:
+      - loki
+
+    networks:
+      - backend
+
+  grafana:
+    image: grafana/grafana:12.2.0
+    restart: unless-stopped
+
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:?required}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?required}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+
+    ports:
+      - "127.0.0.1:3000:3000"
+
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./deploy/grafana-datasources.yml:/etc/grafana/provisioning/datasources/loki.yml:ro
+
+    depends_on:
+      - loki
+
+    networks:
+      - backend
+
+volumes:
+  postgres_data:
+  pgadmin_data:
+  api_logs:
+  loki_data:
+  alloy_data:
+  grafana_data:
+
+networks:
+  backend:
+    driver: bridge
